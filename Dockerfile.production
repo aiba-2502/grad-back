@@ -1,0 +1,88 @@
+# Production Dockerfile for Rails API
+# Multi-stage build for optimized image size
+
+# Build stage
+FROM ruby:3.3.5-slim AS builder
+
+# Install build dependencies
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy Gemfile and Gemfile.lock first for better caching
+COPY Gemfile Gemfile.lock ./
+
+# Install production gems only
+RUN bundle config set --local deployment 'true' && \
+    bundle config set --local without 'development test' && \
+    bundle install --jobs=4 --retry=3 && \
+    rm -rf ./vendor/bundle/cache/*.gem && \
+    find ./vendor/bundle/gems/ -name "*.c" -delete 2>/dev/null || true && \
+    find ./vendor/bundle/gems/ -name "*.o" -delete 2>/dev/null || true
+
+# Copy application code
+COPY . .
+
+# Precompile bootsnap for faster startup
+RUN bundle exec bootsnap precompile --gemfile app/ lib/
+
+# Remove unnecessary files
+RUN rm -rf \
+    .git \
+    .github \
+    spec \
+    test \
+    tmp/cache \
+    vendor/bundle/ruby/*/cache \
+    .bundle/config
+
+# Production stage
+FROM ruby:3.3.5-slim
+
+# Install runtime dependencies only
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends \
+    libpq-dev \
+    postgresql-client \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN groupadd -r rails && useradd -r -g rails rails
+
+# Set working directory
+WORKDIR /app
+
+# Copy built application from builder stage
+COPY --from=builder --chown=rails:rails /app /app
+
+# Create necessary directories
+RUN mkdir -p tmp/pids tmp/cache tmp/sockets log && \
+    chown -R rails:rails tmp log
+
+# Switch to non-root user
+USER rails
+
+# Set Rails environment
+ENV RAILS_ENV=production \
+    RAILS_LOG_TO_STDOUT=true \
+    RAILS_SERVE_STATIC_FILES=false \
+    BUNDLE_PATH=/app/vendor/bundle \
+    BUNDLE_WITHOUT="development:test"
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/up || exit 1
+
+# Run the Rails server
+CMD ["bundle", "exec", "puma", "-C", "config/puma.rb"]
