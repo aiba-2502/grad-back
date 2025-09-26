@@ -52,6 +52,7 @@ RUN apt-get update -qq && \
     libpq-dev \
     postgresql-client \
     curl \
+    libcurl4 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
