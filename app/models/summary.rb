@@ -103,24 +103,27 @@ class Summary < ApplicationRecord
   def needs_new_analysis?
     return false unless user
 
-    # 全ユーザーメッセージ数（ユーザーとアシスタントの両方をカウント）
-    total_messages = user.messages.count
+    # ユーザーが送信したメッセージのみをカウント (Message::SENDER_USER = "USER")
+    total_user_messages = user.messages.where(sender_kind: "USER").count
 
     # 分析済みのデータが存在するかチェック
     analyzed_data_exists = analysis_data.present? && analysis_data["analyzed_at"].present?
 
-    # 開発環境用に要件を緩和
-    required_messages = Rails.env.development? ? 2 : 10
-    required_new_messages = Rails.env.development? ? 2 : 6
+    # 開発環境用に要件を緩和（ユーザーメッセージのみカウント）
+    required_messages = Rails.env.development? ? 3 : 4
+    required_new_messages = Rails.env.development? ? 2 : 4
 
     if !analyzed_data_exists
-      # 初回分析の条件
-      total_messages >= required_messages
+      # 初回分析の条件（ユーザーメッセージ数）
+      total_user_messages >= required_messages
     else
-      # 前回分析以降の新規メッセージ数（ユーザーとアシスタントの両方をカウント）
-      new_messages = user.messages.where("messages.sent_at > ?", analysis_data["analyzed_at"]).count
+      # 前回分析以降の新規ユーザーメッセージ数
+      new_user_messages = user.messages
+                              .where(sender_kind: "USER")
+                              .where("messages.sent_at > ?", analysis_data["analyzed_at"])
+                              .count
       # 追加分析の条件
-      new_messages >= required_new_messages
+      new_user_messages >= required_new_messages
     end
   end
 

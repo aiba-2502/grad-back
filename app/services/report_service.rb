@@ -10,7 +10,8 @@ class ReportService
       strengths: Reports::StrengthAnalyzer.new(user: user),
       thinking_patterns: Reports::ThinkingPatternAnalyzer.new(user: user),
       values: Reports::ValueAnalyzer.new(user: user),
-      conversations: Reports::ConversationAnalyzer.new(user: user)
+      conversations: Reports::ConversationAnalyzer.new(user: user),
+      personal_advice: Reports::PersonalAdviceAnalyzer.new(user: user)
     }
     @keyword_extractor = Extractors::KeywordExtractor.new
     @emotion_service = EmotionExtractionService.new
@@ -44,7 +45,7 @@ class ReportService
       strengths: @analyzers[:strengths].analyze,
       thinkingPatterns: @analyzers[:thinking_patterns].analyze,
       values: @analyzers[:values].analyze,
-      personalAdvice: generate_personal_advice,
+      personalAdvice: @analyzers[:personal_advice].analyze,
       conversationReport: {
         week: @analyzers[:conversations].weekly_report,
         month: @analyzers[:conversations].monthly_report
@@ -105,10 +106,20 @@ class ReportService
       strengths: data["strengths"] || [],
       thinkingPatterns: data["thinking_patterns"] || [],
       values: data["values"] || [],
-      personalAdvice: data["personal_advice"] || generate_personal_advice,
+      personalAdvice: data["personal_advice"] || nil,
       conversationReport: data["conversation_report"] || {
-        week: @analyzers[:conversations].weekly_report,
-        month: @analyzers[:conversations].monthly_report
+        week: {
+          period: "week",
+          summary: nil,
+          frequentKeywords: [],
+          emotionKeywords: []
+        },
+        month: {
+          period: "month",
+          summary: nil,
+          frequentKeywords: [],
+          emotionKeywords: []
+        }
       },
       updatedAt: (summary.updated_at || Time.current).iso8601
     }
